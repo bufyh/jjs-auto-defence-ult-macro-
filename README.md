@@ -4,4 +4,4 @@ auto jjs defense attorney ult minigame.
 
 all python
 
-![preview](Screenshot_4.png)
+![preview](image.png)
