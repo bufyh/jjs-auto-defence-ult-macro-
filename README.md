@@ -1,2 +1,2 @@
 # jjs-auto-defence-ult-macro-
-its only for the minigame thing
+auto jjs defense attorney ult minigame 
