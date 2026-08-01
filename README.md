@@ -5,3 +5,4 @@ auto jjs defense attorney ult minigame.
 all python
 
 ![preview](image.png)
+set that to like 0.2 cuz its fast asf
