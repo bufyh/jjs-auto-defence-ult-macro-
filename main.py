@@ -129,8 +129,8 @@ class app(ctk.CTk):
             im = cv2.imread(resource_path(img), cv2.IMREAD_GRAYSCALE)
             if im is not None: self.templates[img] = {"img": im, "key": key}
 
-        self.cooldown = ctk.StringVar(value="0.05")
-        self.confidence = ctk.StringVar(value="0.65")
+        self.cooldown = ctk.StringVar(value="0.258")
+        self.confidence = ctk.StringVar(value="0.70")
         self.x1, self.y1, self.x2, self.y2 = (ctk.StringVar(value=v) for v in ["936", "810", "987", "870"])
 
         self.setup_ui()
