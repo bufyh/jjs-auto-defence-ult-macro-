@@ -3,12 +3,15 @@ import sys
 import time
 import ctypes
 import winsound
+import threading
 import numpy as np
 import cv2
 from mss import mss
 import customtkinter as ctk
 import pydirectinput
 from pynput import keyboard
+
+pydirectinput.PAUSE = 0
 
 
 def resource_path(p):
@@ -36,7 +39,7 @@ class status_overlay(ctk.CTkToplevel):
 
 
 class hotkey_btn(ctk.CTkButton):
-    def __init__(self, master, hotkey="f2", **kw):
+    def __init__(self, master, hotkey="f4", **kw):
         super().__init__(master, text=hotkey, fg_color="#222", hover_color="#333", **kw)
         self.hotkey = hotkey.lower()
         self.configure(command=self.listen)
@@ -140,16 +143,16 @@ class app(ctk.CTk):
         hk_frame = ctk.CTkFrame(self, fg_color="#121212", corner_radius=6)
         hk_frame.pack(fill="x", padx=16, pady=(16, 8))
 
-        r1 = ctk.CTkFrame(hk_frame, **opts);
+        r1 = ctk.CTkFrame(hk_frame, **opts)
         r1.pack(fill="x", padx=12, pady=(12, 4))
         ctk.CTkLabel(r1, text="toggle:").pack(side="left")
-        self.btn_toggle = hotkey_btn(r1, "f2", width=80, height=24);
+        self.btn_toggle = hotkey_btn(r1, "f4", width=80, height=24)
         self.btn_toggle.pack(side="right")
 
-        r2 = ctk.CTkFrame(hk_frame, **opts);
+        r2 = ctk.CTkFrame(hk_frame, **opts)
         r2.pack(fill="x", padx=12, pady=4)
         ctk.CTkLabel(r2, text="hide:").pack(side="left")
-        self.btn_hide = hotkey_btn(r2, "f3", width=80, height=24);
+        self.btn_hide = hotkey_btn(r2, "f3", width=80, height=24)
         self.btn_hide.pack(side="right")
 
         ctk.CTkButton(hk_frame, text="apply", height=24, fg_color="#222", hover_color="#333",
@@ -158,19 +161,19 @@ class app(ctk.CTk):
         set_frame = ctk.CTkFrame(self, fg_color="#121212", corner_radius=6)
         set_frame.pack(fill="x", padx=16, pady=8)
 
-        s1 = ctk.CTkFrame(set_frame, **opts);
+        s1 = ctk.CTkFrame(set_frame, **opts)
         s1.pack(fill="x", padx=12, pady=(12, 4))
         ctk.CTkLabel(s1, text="cooldown:").pack(side="left")
         ctk.CTkEntry(s1, textvariable=self.cooldown, width=50, height=24, fg_color="#1a1a1a", border_width=0).pack(
             side="right")
 
-        s2 = ctk.CTkFrame(set_frame, **opts);
+        s2 = ctk.CTkFrame(set_frame, **opts)
         s2.pack(fill="x", padx=12, pady=4)
         ctk.CTkLabel(s2, text="confidence:").pack(side="left")
         ctk.CTkEntry(s2, textvariable=self.confidence, width=50, height=24, fg_color="#1a1a1a", border_width=0).pack(
             side="right")
 
-        s3 = ctk.CTkFrame(set_frame, **opts);
+        s3 = ctk.CTkFrame(set_frame, **opts)
         s3.pack(fill="x", padx=12, pady=(4, 12))
         ctk.CTkLabel(s3, text="overlay:").pack(side="left")
         ctk.CTkSwitch(s3, text="", variable=self.show_overlay, command=self.toggle_overlay, width=40).pack(side="right")
@@ -240,13 +243,31 @@ class app(ctk.CTk):
         self.running = not self.running
         if self.running:
             try:
+                self.scan_x = int(self.x1.get())
+                self.scan_y = int(self.y1.get())
+                self.scan_w = int(self.x2.get()) - self.scan_x
+                self.scan_h = int(self.y2.get()) - self.scan_y
+                self.scan_th = float(self.confidence.get())
+                self.scan_cd = float(self.cooldown.get())
+
+                if self.scan_w <= 0 or self.scan_h <= 0:
+                    self.status_lbl.configure(text="invalid region size.")
+                    self.running = False
+                    return
+            except ValueError:
+                self.status_lbl.configure(text="invalid inputs.")
+                self.running = False
+                return
+
+            try:
                 winsound.Beep(1200, 100)
             except:
                 pass
             if self.show_overlay.get(): self.overlay.deiconify()
             self.btn_main.configure(text="stop", fg_color="#333", text_color="#fff")
             self.status_lbl.configure(text="running.")
-            self.scan()
+
+            threading.Thread(target=self.scan_loop, daemon=True).start()
         else:
             try:
                 winsound.Beep(500, 100)
@@ -256,30 +277,39 @@ class app(ctk.CTk):
             self.btn_main.configure(text="start", fg_color="#ededed", text_color="#0a0a0a")
             self.status_lbl.configure(text="stopped.")
 
-    def scan(self):
-        if not self.running: return
-        try:
-            x, y, x2, y2 = int(self.x1.get()), int(self.y1.get()), int(self.x2.get()), int(self.y2.get())
-            w, h = x2 - x, y2 - y
-            th = float(self.confidence.get())
-            cd = int(float(self.cooldown.get()) * 1000)
+    def scan_loop(self):
+        monitor = {
+            "left": self.scan_x,
+            "top": self.scan_y,
+            "width": self.scan_w,
+            "height": self.scan_h
+        }
 
-            if w > 0 and h > 0:
-                frm = cv2.cvtColor(np.array(self.sct.grab({"left": x, "top": y, "width": w, "height": h})),
-                                   cv2.COLOR_BGRA2GRAY)
-                for d in self.templates.values():
-                    t = d["img"]
-                    if frm.shape[0] < t.shape[0] or frm.shape[1] < t.shape[1]: continue
-                    _, val, _, _ = cv2.minMaxLoc(cv2.matchTemplate(frm, t, cv2.TM_CCOEFF_NORMED))
-                    if val >= th:
-                        k = d["key"]
-                        pydirectinput.keyDown(k)
-                        self.after(50, lambda: pydirectinput.keyUp(k))
-                        self.after(cd, self.scan)
-                        return
-        except:
-            pass
-        self.after(1, self.scan)
+        while self.running:
+            sct_img = self.sct.grab(monitor)
+            frm = cv2.cvtColor(np.array(sct_img), cv2.COLOR_BGRA2GRAY)
+
+            matched = False
+            for d in self.templates.values():
+                t = d["img"]
+                if frm.shape[0] < t.shape[0] or frm.shape[1] < t.shape[1]:
+                    continue
+
+                res = cv2.matchTemplate(frm, t, cv2.TM_CCOEFF_NORMED)
+                _, val, _, _ = cv2.minMaxLoc(res)
+
+                if val >= self.scan_th:
+                    k = d["key"]
+                    pydirectinput.keyDown(k)
+                    time.sleep(0.03)
+                    pydirectinput.keyUp(k)
+
+                    time.sleep(self.scan_cd)
+                    matched = True
+                    break
+
+            if not matched:
+                time.sleep(0.001)
 
 
 if __name__ == "__main__":
