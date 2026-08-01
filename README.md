@@ -5,4 +5,5 @@ auto jjs defense attorney ult minigame.
 all python
 
 ![preview](image.png)
-set that to like 0.2 cuz its fast asf
+
+set that to like 0.259 cuz its fast asf but if u want the FASTEST set it to 0.0001
